@@ -125,7 +125,7 @@ const ChatComponent = () => {
         setIsTTSPlaying(false);
         // 🔁 Auto resume listening after TTS ends
         if (autoResume) {
-          handleMicrophoneClick();
+          // handleMicrophoneClick();
         }
       };
 
@@ -387,7 +387,7 @@ const ChatComponent = () => {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full max-h-full min-h-0">
       {/* Header */}
       <div className="p-4 border-b flex-shrink-0">
         <div className="flex gap-2">
@@ -436,11 +436,10 @@ const ChatComponent = () => {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full p-4">
-            <div className="space-y-4">
-              {messages.map((message) => (
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+        <ScrollArea className="flex-1 p-4">
+          <div className="space-y-4">
+            {messages.map((message) => (
                 <div
                   key={message.id}
                   className={`flex gap-3 ${
@@ -500,73 +499,71 @@ const ChatComponent = () => {
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
-        </div>
 
-        {/* Input Area */}
-        <div className="p-4 border-t flex-shrink-0">
-          {isRecording ? (
-            <div className="space-y-4">
-              <div className="bg-muted/50 rounded-lg p-4">
-                <div className="text-center text-sm text-muted-foreground mb-2">
-                  {isMuted ? 'Microphone muted' : isTTSPlaying ? 'Paused for TTS...' : 'Listening...'}
+          {/* Input Area */}
+          <div className="p-4 border-t flex-shrink-0">
+            {isRecording ? (
+              <div className="space-y-4">
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <div className="text-center text-sm text-muted-foreground mb-2">
+                    {isMuted ? 'Microphone muted' : isTTSPlaying ? 'Paused for TTS...' : 'Listening...'}
+                  </div>
+                  <div className="h-20">
+                    <AudioVisualizer
+                      stream={audioStream}
+                      isRecording={isRecording}
+                      onClick={handleStopRecording}
+                      isMuted={isMuted || isTTSPlaying}
+                    />
+                  </div>
                 </div>
-                <div className="h-20">
-                  <AudioVisualizer
-                    stream={audioStream}
-                    isRecording={isRecording}
+                <div className="flex gap-2 justify-center">
+                  <Button
+                    onClick={handleToggleMute}
+                    size="icon"
+                    variant={isMuted ? "destructive" : "outline"}
+                    className="rounded-full"
+                  >
+                    {isMuted ? (
+                      <IconMicrophoneOff size={16} />
+                    ) : (
+                      <IconMicrophone size={16} />
+                    )}
+                  </Button>
+                  <Button
                     onClick={handleStopRecording}
-                    isMuted={isMuted || isTTSPlaying}
-                  />
+                    size="icon"
+                    variant="destructive"
+                    className="rounded-full"
+                  >
+                    <IconX size={16} />
+                  </Button>
                 </div>
               </div>
-              <div className="flex gap-2 justify-center">
+            ) : (
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Type your message..."
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  className="flex-1"
+                />
                 <Button
-                  onClick={handleToggleMute}
+                  onClick={handleMicrophoneClick}
                   size="icon"
-                  variant={isMuted ? "destructive" : "outline"}
-                  className="rounded-full"
                 >
-                  {isMuted ? (
-                    <IconMicrophoneOff size={16} />
+                  {inputText.trim() ? (
+                    <IconSend size={16} />
                   ) : (
                     <IconMicrophone size={16} />
                   )}
                 </Button>
-                <Button
-                  onClick={handleStopRecording}
-                  size="icon"
-                  variant="destructive"
-                  className="rounded-full"
-                >
-                  <IconX size={16} />
-                </Button>
               </div>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <Input
-                placeholder="Type your message..."
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyPress={handleKeyPress}
-                className="flex-1"
-              />
-              <Button
-                onClick={handleMicrophoneClick}
-                size="icon"
-                disabled={false}
-              >
-                {inputText.trim() ? (
-                  <IconSend size={16} />
-                ) : (
-                  <IconMicrophone size={16} />
-                )}
-              </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
-    </div>
   );
 };
 

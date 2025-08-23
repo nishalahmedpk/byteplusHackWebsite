@@ -63,14 +63,14 @@ export default function Page() {
               <div className="h-full p-4 md:p-6">
                 {/* Show both by default, or only one if selected */}
                 {view === 'all' && (
-                  <div className="grid grid-cols-1 gap-4 h-full @xl/main:grid-cols-2 ">
-                      <Card className="@container/card flex flex-col overflow-hidden">
-                          <ChatComponent />
-                      </Card>
-                      <Card className="@container/card flex flex-col overflow-hidden">
-                          <MapComponent/>
-                      </Card>
-                  </div>
+                    <div className="grid grid-cols-1 gap-4 h-full @xl/main:grid-cols-2 ">
+                        <Card className="@container/card flex flex-col overflow-hidden">
+                            <ChatComponent />
+                        </Card>
+                        <Card className="@container/card flex flex-col overflow-hidden">
+                            <MapComponent/>
+                        </Card>
+                    </div>
                 )}
                 {view === 'chat' && (
                   <div className="h-full">
