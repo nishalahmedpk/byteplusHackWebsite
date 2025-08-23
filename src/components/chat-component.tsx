@@ -4,7 +4,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { AudioVisualizer } from '@/components/ui/audio-visualizer';
 import {
@@ -13,7 +12,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { IconPlus, IconMicrophone, IconSend, IconUser, IconRobot, IconChevronDown, IconHistory, IconX, IconMicrophoneOff } from '@tabler/icons-react';
+import { 
+  IconPlus, IconMicrophone, IconSend, IconUser, IconRobot, 
+  IconChevronDown, IconHistory, IconX, IconMicrophoneOff 
+} from '@tabler/icons-react';
 
 interface ChatMessage {
   id: string;
@@ -33,6 +35,7 @@ const ChatComponent = () => {
   const [inputText, setInputText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isTTSPlaying, setIsTTSPlaying] = useState(false);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -51,7 +54,12 @@ const ChatComponent = () => {
     }
   ]);
   const [currentChatId, setCurrentChatId] = useState('1');
+  const [apiEndpoint, setApiEndpoint] = useState("https://mtcragbotserver.onrender.com");
+  const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const threadIdRef = useRef<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -61,7 +69,182 @@ const ChatComponent = () => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = () => {
+  // Create new thread
+  const createThread = async () => {
+    try {
+      const response = await fetch(`${apiEndpoint}/threads`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json();
+      return data.thread_id;
+    } catch (error) {
+      console.error("Error creating thread:", error);
+      return null;
+    }
+  };
+
+  // Create thread on mount
+  useEffect(() => {
+    const initThread = async () => {
+      threadIdRef.current = await createThread();
+    };
+    initThread();
+  }, [apiEndpoint]);
+
+  // 🔊 ElevenLabs TTS
+  const playTTS = async (text: string, autoResume = false) => {
+    try {
+      const response = await fetch(
+        "https://api.elevenlabs.io/v1/text-to-speech/EXAVITQu4vr4xnSDxMaL",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "xi-api-key": process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY || ""
+          },
+          body: JSON.stringify({
+            text,
+            model_id: "eleven_monolingual_v1",
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.75
+            }
+          })
+        }
+      );
+
+      const audioData = await response.arrayBuffer();
+      const audioBlob = new Blob([audioData], { type: "audio/mpeg" });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+
+      setIsTTSPlaying(true);
+      audio.onended = () => {
+        setIsTTSPlaying(false);
+        // 🔁 Auto resume listening after TTS ends
+        if (autoResume) {
+          handleMicrophoneClick();
+        }
+      };
+
+      await audio.play();
+    } catch (error) {
+      console.error("TTS error:", error);
+      setIsTTSPlaying(false);
+    }
+  };
+
+  // 🎤 ElevenLabs STT
+  const processAudioSTT = async (audioBlob: Blob, voiceMode = false) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", audioBlob, "recording.webm");
+      formData.append("model_id", "scribe_v1");
+
+      const response = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+        method: "POST",
+        headers: {
+          "xi-api-key": process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY || ""
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        console.error("STT failed:", response.status, await response.text());
+        return;
+      }
+
+      const result = await response.json();
+      console.log("STT result:", result);
+
+      if (result && result.text) {
+        const userMessage: ChatMessage = {
+          id: Date.now().toString(),
+          text: result.text,
+          sender: 'user',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, userMessage]);
+        await handleBotResponse(result.text, voiceMode);
+      }
+    } catch (error) {
+      console.error("STT error:", error);
+    }
+  };
+
+  // 🔊 Bot response with LangGraph API and optional TTS
+  const handleBotResponse = async (userText: string, voiceMode = false) => {
+    setIsTyping(true);
+    
+    try {
+      if (!threadIdRef.current) {
+        threadIdRef.current = await createThread();
+      }
+
+      const body = {
+        assistant_id: "agent",
+        input: { messages: [{ role: "user", content: userText }] },
+      };
+
+      const response = await fetch(
+        `${apiEndpoint}/threads/${threadIdRef.current}/runs/wait`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
+
+      const data = await response.json();
+      console.log("📦 API Response:", data);
+
+      let botResponse = "Sorry, I couldn't get a response from the bot.";
+
+      if (Array.isArray(data?.messages)) {
+        const aiMessages = data.messages.filter((m: any) => m.type === "ai");
+        if (aiMessages.length > 0) {
+          botResponse = aiMessages[aiMessages.length - 1].content;
+        }
+      }
+
+      setTimeout(async () => {
+        const botMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          text: botResponse,
+          sender: 'bot',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, botMessage]);
+        setIsTyping(false);
+
+        // Play TTS if in voice mode and auto-resume listening
+        if (voiceMode || isRecording) {
+          await playTTS(botResponse, true);
+        }
+      }, Math.random() * 1000 + 1000);
+    } catch (error) {
+      console.error("❌ API Error:", error);
+      setTimeout(async () => {
+        const errorMessage = "Oops! Something went wrong with the API call. Please check your connection and try again! 😢";
+        const botMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          text: errorMessage,
+          sender: 'bot',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, botMessage]);
+        setIsTyping(false);
+        
+        if (voiceMode || isRecording) {
+          await playTTS(errorMessage, true);
+        }
+      }, 1000);
+    }
+  };
+
+  const handleSendMessage = async () => {
     if (!inputText.trim()) return;
 
     const newMessage: ChatMessage = {
@@ -72,18 +255,10 @@ const ChatComponent = () => {
     };
 
     setMessages(prev => [...prev, newMessage]);
+    const messageText = inputText;
     setInputText('');
 
-    // Simulate bot response
-    setTimeout(() => {
-      const botMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        text: 'Thank you for your message! This is a simulated response.',
-        sender: 'bot',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, botMessage]);
-    }, 1000);
+    await handleBotResponse(messageText);
   };
 
   const handleMicrophoneClick = async () => {
@@ -95,6 +270,60 @@ const ChatComponent = () => {
         setAudioStream(stream);
         setIsRecording(true);
         setIsMuted(false);
+
+        const options = { mimeType: "audio/webm" };
+        const mediaRecorder = new MediaRecorder(stream, options);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+          await processAudioSTT(audioBlob, true);
+        };
+
+        mediaRecorder.start();
+
+        // 👂 Silence detection
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        source.connect(analyser);
+        const dataArray = new Uint8Array(analyser.fftSize);
+
+        let silenceStart = Date.now();
+        const SILENCE_THRESHOLD = 0.01;
+        const SILENCE_DURATION = 2000;
+
+        const checkSilence = () => {
+          if (isMuted || isTTSPlaying) {
+            requestAnimationFrame(checkSilence);
+            return;
+          }
+
+          analyser.getByteFrequencyData(dataArray);
+          let values = 0;
+          for (let i = 0; i < dataArray.length; i++) values += dataArray[i];
+          const average = values / dataArray.length;
+
+          if (average < SILENCE_THRESHOLD * 255) {
+            if (Date.now() - silenceStart > SILENCE_DURATION) {
+              handleStopRecording();
+              return;
+            }
+          } else {
+            silenceStart = Date.now();
+          }
+
+          requestAnimationFrame(checkSilence);
+        };
+
+        checkSilence();
       } catch (error) {
         console.error('Error accessing microphone:', error);
       }
@@ -102,18 +331,19 @@ const ChatComponent = () => {
   };
 
   const handleStopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
     if (audioStream) {
       audioStream.getTracks().forEach(track => track.stop());
       setAudioStream(null);
     }
     setIsRecording(false);
     setIsMuted(false);
-    // Here you would stop recording and process the audio
   };
 
   const handleToggleMute = () => {
     setIsMuted(!isMuted);
-    // Here you would mute/unmute the microphone
   };
 
   const handleNewChat = () => {
@@ -146,7 +376,6 @@ const ChatComponent = () => {
 
   const selectChat = (chatId: string) => {
     setCurrentChatId(chatId);
-    // In a real app, you'd load the messages for this chat
     setMessages([
       {
         id: '1',
@@ -159,7 +388,7 @@ const ChatComponent = () => {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header with New Chat Button and Chat History Dropdown */}
+      {/* Header */}
       <div className="p-4 border-b flex-shrink-0">
         <div className="flex gap-2">
           <Button
@@ -206,9 +435,8 @@ const ChatComponent = () => {
         </div>
       </div>
 
-      {/* Main Chat Area - Full Width */}
+      {/* Chat Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Messages */}
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full p-4">
             <div className="space-y-4">
@@ -247,6 +475,28 @@ const ChatComponent = () => {
                   )}
                 </div>
               ))}
+              
+              {/* Typing indicator */}
+              {isTyping && (
+                <div className="flex gap-3 justify-start">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback>
+                      <IconRobot size={16} />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="bg-muted rounded-lg px-3 py-2">
+                    <div className="flex items-center space-x-1">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-2">Bot is thinking...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
@@ -255,18 +505,17 @@ const ChatComponent = () => {
         {/* Input Area */}
         <div className="p-4 border-t flex-shrink-0">
           {isRecording ? (
-            /* Recording Mode with Audio Visualizer */
             <div className="space-y-4">
               <div className="bg-muted/50 rounded-lg p-4">
                 <div className="text-center text-sm text-muted-foreground mb-2">
-                  {isMuted ? 'Microphone muted' : 'Listening...'}
+                  {isMuted ? 'Microphone muted' : isTTSPlaying ? 'Paused for TTS...' : 'Listening...'}
                 </div>
                 <div className="h-20">
                   <AudioVisualizer
                     stream={audioStream}
                     isRecording={isRecording}
                     onClick={handleStopRecording}
-                    isMuted={isMuted}
+                    isMuted={isMuted || isTTSPlaying}
                   />
                 </div>
               </div>
@@ -294,7 +543,6 @@ const ChatComponent = () => {
               </div>
             </div>
           ) : (
-            /* Normal Input Mode */
             <div className="flex gap-2">
               <Input
                 placeholder="Type your message..."
