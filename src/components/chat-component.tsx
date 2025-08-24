@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { AudioVisualizer } from '@/components/ui/audio-visualizer';
+import { supabase } from '@/lib/supabaseClient';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,7 +30,11 @@ interface ChatHistory {
   title: string;
   lastMessage: string;
   timestamp: Date;
+  threadId: string;
 }
+
+// API Configuration
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 const ChatComponent = () => {
   const [inputText, setInputText] = useState('');
@@ -37,6 +42,8 @@ const ChatComponent = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [isTTSPlaying, setIsTTSPlaying] = useState(false);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
+  const [threadIds, setThreadIds] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
@@ -50,7 +57,8 @@ const ChatComponent = () => {
       id: '1',
       title: 'Welcome Chat',
       lastMessage: 'Hello! How can I help you today?',
-      timestamp: new Date()
+      timestamp: new Date(),
+      threadId: ''
     }
   ]);
   const [currentChatId, setCurrentChatId] = useState('1');
@@ -78,7 +86,16 @@ const ChatComponent = () => {
         body: JSON.stringify({}),
       });
       const data = await response.json();
-      return data.thread_id;
+      const threadId = data.thread_id;
+      
+      // Update state
+      setCurrentThreadId(threadId);
+      setThreadIds(prev => [...prev, threadId]);
+      
+      // Store thread in Supabase
+      await saveThreadToSupabase(threadId);
+      
+      return threadId;
     } catch (error) {
       console.error("Error creating thread:", error);
       return null;
@@ -346,25 +363,132 @@ const ChatComponent = () => {
     setIsMuted(!isMuted);
   };
 
-  const handleNewChat = () => {
-    const newChatId = Date.now().toString();
-    const newChat: ChatHistory = {
-      id: newChatId,
-      title: 'New Chat',
-      lastMessage: 'Start a conversation...',
-      timestamp: new Date()
-    };
+  const saveThreadToSupabase = async (threadId: string) => {
+  try {
+    // Get the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      console.error('No authenticated user found');
+      return;
+    }
 
-    setChatHistory(prev => [newChat, ...prev]);
-    setCurrentChatId(newChatId);
-    setMessages([
-      {
-        id: '1',
-        text: 'Hello! How can I help you today?',
-        sender: 'bot',
-        timestamp: new Date()
+    const { error } = await supabase
+      .from('chat_threads')
+      .insert([
+        {
+          thread_id: threadId,
+          user_id: user.id, // Use actual user ID
+          title: 'New Chat',
+          last_message: 'Start a conversation...'
+        }
+      ]);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error('Error saving thread to Supabase:', error);
+  }
+};
+
+const loadThreadsFromSupabase = async () => {
+  try {
+    // Get the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      console.error('No authenticated user found');
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('chat_threads')
+      .select('*')
+      .eq('user_id', user.id) // Filter by user ID
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    if (data) {
+      const threads = data.map(thread => ({
+        id: thread.thread_id,
+        title: thread.thread_id,
+        lastMessage: thread.last_message,
+        timestamp: new Date(thread.created_at),
+        threadId: thread.thread_id
+      }));
+      
+      setChatHistory(threads);
+      setThreadIds(data.map(thread => thread.thread_id));
+    }
+  } catch (error) {
+    console.error('Error loading threads from Supabase:', error);
+  }
+};
+  const getChatState = async (threadID: string): Promise<any> => {
+    try {
+      const response = await fetch(`${apiEndpoint}/threads/${threadID}/state`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to get chat state');
       }
-    ]);
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error getting chat state:', error);
+      throw error;
+    }
+  };
+
+  // Load threads on component mount
+  useEffect(() => {
+    loadThreadsFromSupabase();
+  }, []);
+
+  const handleNewChat = async () => {
+    try {
+      const threadId = await createThread();
+      const newChatId = Date.now().toString();
+      const newChat: ChatHistory = {
+        id: newChatId,
+        title: 'New Chat',
+        lastMessage: 'Start a conversation...',
+        timestamp: new Date(),
+        threadId: threadId || ''
+      };
+
+      setChatHistory(prev => [newChat, ...prev]);
+      setCurrentChatId(newChatId);
+      setMessages([
+        {
+          id: '1',
+          text: 'Hello! How can I help you today?',
+          sender: 'bot',
+          timestamp: new Date()
+        }
+      ]);
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+      // Fallback to local chat without thread
+      const newChatId = Date.now().toString();
+      const newChat: ChatHistory = {
+        id: newChatId,
+        title: 'New Chat',
+        lastMessage: 'Start a conversation...',
+        timestamp: new Date(),
+        threadId: ''
+      };
+
+      setChatHistory(prev => [newChat, ...prev]);
+      setCurrentChatId(newChatId);
+      setMessages([
+        {
+          id: '1',
+          text: 'Hello! How can I help you today?',
+          sender: 'bot',
+          timestamp: new Date()
+        }
+      ]);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -374,16 +498,92 @@ const ChatComponent = () => {
     }
   };
 
-  const selectChat = (chatId: string) => {
+  const selectChat = async (chatId: string) => {
     setCurrentChatId(chatId);
-    setMessages([
-      {
-        id: '1',
-        text: 'Hello! How can I help you today?',
-        sender: 'bot',
-        timestamp: new Date()
+    
+    // Find the selected chat to get its thread ID
+    const selectedChat = chatHistory.find(chat => chat.id === chatId);
+    
+    if (selectedChat && selectedChat.threadId) {
+      try {
+        setCurrentThreadId(selectedChat.threadId);
+        
+        // Load chat state from API
+        const chatState = await getChatState(selectedChat.threadId);
+        
+        // Convert API response to messages format
+        if (chatState && chatState.values && chatState.values.messages) {
+          // const loadedMessages = chatState.values.messages.map((msg: any, index: number) => ({
+          //   id: `${selectedChat.threadId}-${index}`,
+          //   text: msg.content || msg.text || '',
+          //   sender: msg.role === 'user' ? 'user' : 'bot',
+          //   timestamp: new Date(msg.timestamp || Date.now())
+          // }));
+          
+            const loadedMessages = chatState.values.messages.map((msg: any, index: number) => {
+              let text = '';
+              
+              if (typeof msg.content === 'string') {
+                text = msg.content;
+              } else if (Array.isArray(msg.content)) {
+                const textPart = msg.content.find((c: any) => c.type === 'text');
+                text = textPart?.text || '';
+              }
+
+              if (!text) return null;
+
+              return {
+                id: `${selectedChat.threadId}-${index}`,
+                text,
+                sender: msg.type === 'human' ? 'user' : msg.type === 'ai' ? 'bot' : 'system',
+                timestamp: new Date(msg.timestamp || Date.now()),
+              };
+            }).filter(Boolean);
+          
+          
+          setMessages(loadedMessages.length > 0 ? loadedMessages : [
+            {
+              id: '1',
+              text: 'Hello! How can I help you today?',
+              sender: 'bot',
+              timestamp: new Date()
+            }
+          ]);
+        } else {
+          // Fallback if no messages in state
+          setMessages([
+            {
+              id: '1',
+              text: 'Hello! How can I help you today?',
+              sender: 'bot',
+              timestamp: new Date()
+            }
+          ]);
+        }
+      } catch (error) {
+        console.error('Error loading chat state:', error);
+        // Fallback to default message
+        setMessages([
+          {
+            id: '1',
+            text: 'Hello! How can I help you today?',
+            sender: 'bot',
+            timestamp: new Date()
+          }
+        ]);
       }
-    ]);
+    } else {
+      // No thread ID, load default message
+      setCurrentThreadId(null);
+      setMessages([
+        {
+          id: '1',
+          text: 'Hello! How can I help you today?',
+          sender: 'bot',
+          timestamp: new Date()
+        }
+      ]);
+    }
   };
 
   return (
