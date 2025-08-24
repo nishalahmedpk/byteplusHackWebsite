@@ -17,6 +17,7 @@ import {
   IconPlus, IconMicrophone, IconSend, IconUser, IconRobot, 
   IconChevronDown, IconHistory, IconX, IconMicrophoneOff 
 } from '@tabler/icons-react';
+import JourneyMap from './map2';
 
 interface ChatMessage {
   id: string;
@@ -62,7 +63,7 @@ const ChatComponent = () => {
     }
   ]);
   const [currentChatId, setCurrentChatId] = useState('1');
-  const [apiEndpoint, setApiEndpoint] = useState("https://mtcragbotserver.onrender.com");
+  const [apiEndpoint, setApiEndpoint] = useState("http://127.0.0.1:2024");
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -123,9 +124,9 @@ const ChatComponent = () => {
           },
           body: JSON.stringify({
             text,
-            model_id: "eleven_monolingual_v1",
+            model_id: "eleven_flash_v2_5",
             voice_settings: {
-              stability: 0.5,
+              stability: 0.8,
               similarity_boost: 0.75
             }
           })
@@ -764,7 +765,9 @@ const loadThreadsFromSupabase = async () => {
             )}
           </div>
         </div>
+        {/* <JourneyMap threadID={currentThreadId ?? undefined} apiEndpoint={apiEndpoint} /> */}
       </div>
+      
   );
 };
 

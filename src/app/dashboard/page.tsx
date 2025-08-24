@@ -17,6 +17,7 @@ import {
 import data from "./data.json"
 import { Card } from "@/components/ui/card";
 import SettingsComponent from "@/components/settings-component";
+import JourneyMap from "@/components/map2";
 
 
 
@@ -86,6 +87,7 @@ export default function Page() {
                   <div className="h-full">
                     <Card className="h-full flex flex-col overflow-hidden p-0">
                       <MapComponent />
+                      {/* <JourneyMap threadID={currentThreadId} apiEndpoint={apiEndpoint} /> */}
                     </Card>
                   </div>
                 )}
