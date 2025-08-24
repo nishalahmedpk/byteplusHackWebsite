@@ -16,26 +16,29 @@ import {
 
 import data from "./data.json"
 import { Card } from "@/components/ui/card";
+import SettingsComponent from "@/components/settings-component";
 
 
 
 export default function Page() {
   const [user, setUser] = useState<any>(null);
-  const [view, setView] = useState<'all' | 'chat' | 'map'>('all');
+  const [view, setView] = useState<'all' | 'chat' | 'map' | 'set'>('all');
 
   useEffect(() => {
     const session = supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null));
   }, []);
 
   // Handler for navigation (to be passed to sidebar)
-  const handleNavAction = (nav: 'all' | 'chat' | 'map') => setView(nav);
+  const handleNavAction = (nav: 'all' | 'chat' | 'map' | 'set') => setView(nav);
 
-  const getTitle = (view: 'all' | 'chat' | 'map') => {
+  const getTitle = (view: 'all' | 'chat' | 'map' | 'set') => {
     switch (view) {
       case 'chat':
         return "Chatbot";
       case 'map':
         return "Map";
+      case 'set':
+        return "Settings";
       default:
         return "Home";
     }
@@ -83,6 +86,13 @@ export default function Page() {
                   <div className="h-full">
                     <Card className="h-full flex flex-col overflow-hidden p-0">
                       <MapComponent />
+                    </Card>
+                  </div>
+                )}
+                {view === 'set' && (
+                  <div className="h-full">
+                    <Card className="h-full flex flex-col overflow-hidden p-0">
+                      <SettingsComponent />
                     </Card>
                   </div>
                 )}

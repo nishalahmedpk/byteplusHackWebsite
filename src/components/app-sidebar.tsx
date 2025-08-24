@@ -53,6 +53,11 @@ const data = {
       url: "#",
       icon: IconMap,
     },
+        {
+      title: "Settings",
+      url: "#",
+      icon: IconSettings,
+    },
   ],
   navClouds: [
     {
@@ -118,7 +123,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
     email: string
     avatar: string
   }
-  onNavAction?: (nav: 'all' | 'chat' | 'map') => void;
+  onNavAction?: (nav: 'all' | 'chat' | 'map' | 'set') => void;
 }
 export function AppSidebar({ user, onNavAction, ...props }: AppSidebarProps) {
 
@@ -141,7 +146,7 @@ export function AppSidebar({ user, onNavAction, ...props }: AppSidebarProps) {
       </SidebarHeader>
       <SidebarContent>
   <NavMain items={data.navMain} onNavAction={onNavAction} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        {/* <NavSecondary items={data.navSecondary} className="mt-auto" /> */}
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} />

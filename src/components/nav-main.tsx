@@ -20,7 +20,7 @@ export function NavMain({
     url: string
     icon?: Icon
   }[],
-  onNavAction?: (nav: 'all' | 'chat' | 'map') => void
+  onNavAction?: (nav: 'all' | 'chat' | 'map' | 'set') => void
 }) {
   // Map nav titles to view keys
   const handleClick = (title: string) => {
@@ -28,6 +28,7 @@ export function NavMain({
     if (title === 'Chatbot') onNavAction('chat');
     else if (title === 'Map') onNavAction('map');
     else if (title === 'Home') onNavAction('all');
+    else if (title === 'Settings') onNavAction('set');
   };
   return (
     <SidebarGroup>
