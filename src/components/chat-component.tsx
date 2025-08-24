@@ -387,7 +387,7 @@ const ChatComponent = () => {
   };
 
   return (
-    <div className="flex flex-col h-full max-h-full min-h-0">
+    <div className="flex flex-col h-[80vh] overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b flex-shrink-0">
         <div className="flex gap-2">
@@ -436,8 +436,9 @@ const ChatComponent = () => {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-        <ScrollArea className="flex-1 p-4">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <ScrollArea className="flex-1 min-h-0 overflow-y-auto p-4">
+
           <div className="space-y-4">
             {messages.map((message) => (
                 <div

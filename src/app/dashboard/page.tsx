@@ -64,24 +64,24 @@ export default function Page() {
                 {/* Show both by default, or only one if selected */}
                 {view === 'all' && (
                     <div className="grid grid-cols-1 gap-4 h-full @xl/main:grid-cols-2 ">
-                        <Card className="@container/card flex flex-col overflow-hidden">
+                        <Card className="@container/card flex flex-col overflow-hidden p-0">
                             <ChatComponent />
                         </Card>
-                        <Card className="@container/card flex flex-col overflow-hidden">
+                        <Card className="@container/card flex flex-col overflow-hidden p-0">
                             <MapComponent/>
                         </Card>
                     </div>
                 )}
                 {view === 'chat' && (
                   <div className="h-full">
-                    <Card className="h-full flex flex-col overflow-hidden">
+                    <Card className="h-full flex flex-col overflow-hidden p-0">
                       <ChatComponent />
                     </Card>
                   </div>
                 )}
                 {view === 'map' && (
                   <div className="h-full">
-                    <Card className="h-full flex flex-col overflow-hidden">
+                    <Card className="h-full flex flex-col overflow-hidden p-0">
                       <MapComponent />
                     </Card>
                   </div>
